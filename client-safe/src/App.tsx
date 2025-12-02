@@ -2,36 +2,28 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import myVideo from "../../french_final.mp4";
 
 function App() {
-  const [count, setCount] = useState(0)
 
   return (
-    <>
+    <div className="page">
       <div className="videoContainer">
-
+        <video
+          src={myVideo}
+          controls
+          className="vid"
+        />
       </div>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+      <div className="rightContent">
+        <div className="tts">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum eu facilisis dui, in efficitur tellus. Curabitur eu turpis nec ipsum fermentum imperdiet at et tellus. Cras varius eu lectus id semper. Sed vel felis eget ipsum aliquam consectetur a ut mauris. Vestibulum erat mi, varius in est ut, pharetra mattis dolor. Quisque quis bibendum erat, id consectetur mi. Maecenas ullamcorper metus sit amet magna scelerisque, non convallis lacus sagittis.Ut consectetur et augue et condimentum. Quisque efhruilgriesuzgliuflskjfnlgkzsjbglkjzsblgjzs zlsjdglskjgblkjszbdg</p>
+        </div>
+        <div className="lessonContainer">
+          Lesson container
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   )
 }
 
