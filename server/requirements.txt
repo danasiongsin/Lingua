@@ -1,4 +1,8 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings  # for BaseSettings
 httpx        # useful for async HTTP calls to LLMs
+google-cloud-speech  # for audio transcription
+moviepy      # for video processing and audio extraction
+python-multipart  # for file uploads
