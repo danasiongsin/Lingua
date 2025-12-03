@@ -1,8 +1,8 @@
 import os
 import tempfile
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from services.llm_service import call_llm
 from services.video_service import process_video
+from services.agent_service import agent_service
 
 router = APIRouter()
 
@@ -35,8 +35,12 @@ async def process_video_endpoint(video: UploadFile = File(...)):
             content = await video.read()
             f.write(content)
 
+        print("Video saved to:", video_path)
+
         # Process video: extract audio and transcribe
         transcript = await process_video(video_path)
+
+        print("Transcription:", transcript)
 
         if not transcript:
             raise HTTPException(
@@ -44,14 +48,15 @@ async def process_video_endpoint(video: UploadFile = File(...)):
                 detail="No speech detected in the video"
             )
 
-        # Feed transcription through AI agent
-        ai_response = await call_llm(transcript)
+        # Feed transcription through AI agent to generate lesson plan
+        lesson_plan = await agent_service.generate_lesson_plan(transcript)
+
+        print("Lesson Plan generated.", lesson_plan)
 
         return {
             "transcript": transcript,
-            "ai_response": ai_response
+            "lesson_plan": lesson_plan
         }
-
     except HTTPException:
         raise
     except Exception as e:

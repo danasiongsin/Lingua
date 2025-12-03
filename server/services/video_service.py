@@ -1,9 +1,12 @@
 import os
 import tempfile
 from pathlib import Path
-from google.cloud import speech
+from google.cloud.speech_v2 import SpeechClient
+from google.cloud.speech_v2.types import cloud_speech
 from moviepy import VideoFileClip
-from config import settings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 async def extract_audio_from_video(video_path: str) -> str:
     """
@@ -30,7 +33,7 @@ async def extract_audio_from_video(video_path: str) -> str:
 
 async def transcribe_audio(audio_path: str) -> str:
     """
-    Transcribe audio file using Google Speech-to-Text API.
+    Transcribe audio file using Google Speech-to-Text v2 API.
 
     Args:
         audio_path: Path to the audio file
@@ -38,31 +41,71 @@ async def transcribe_audio(audio_path: str) -> str:
     Returns:
         Transcribed text
     """
-    # Initialize the Speech-to-Text client
-    client = speech.SpeechClient()
+    try:
+        # Verify credentials are set
+        credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        if not credentials_path:
+            raise ValueError("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
 
-    # Read the audio file
-    with open(audio_path, "rb") as audio_file:
-        content = audio_file.read()
+        if not os.path.exists(credentials_path):
+            raise ValueError(f"Credentials file not found at: {credentials_path}")
 
-    # Configure recognition settings
-    audio = speech.RecognitionAudio(content=content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=44100,
-        language_code="en-US",
-        enable_automatic_punctuation=True,
-    )
+        print(f"Using credentials from: {credentials_path}")
 
-    # Perform the transcription
-    response = client.recognize(config=config, audio=audio)
+        # Initialize the Speech-to-Text v2 client
+        client = SpeechClient()
 
-    # Combine all transcription results
-    transcript = ""
-    for result in response.results:
-        transcript += result.alternatives[0].transcript + " "
+        # Read the audio file
+        with open(audio_path, "rb") as audio_file:
+            content = audio_file.read()
 
-    return transcript.strip()
+        # Configure recognition settings for v2 API with Spanish and English support
+        config = cloud_speech.RecognitionConfig(
+            auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
+            language_codes=["es-ES", "en-US"],  # Support both Spanish and English
+            model="long",
+            features=cloud_speech.RecognitionFeatures(
+                enable_automatic_punctuation=True,
+            ),
+        )
+
+        # Build the request - use project ID from credentials
+        # First try environment variable, then extract from credentials file
+        project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
+
+        if not project_id:
+            # Extract project_id from credentials file
+            import json
+            with open(credentials_path, 'r') as f:
+                creds_data = json.load(f)
+                project_id = creds_data.get('project_id', 'gen-lang-client-0982694589')
+
+        print(f"Using project ID: {project_id}")
+
+        request = cloud_speech.RecognizeRequest(
+            recognizer=f"projects/{project_id}/locations/global/recognizers/_",
+            config=config,
+            content=content,
+        )
+
+        print("Starting transcription with Speech-to-Text v2...")
+
+        # Perform the transcription
+        response = client.recognize(request=request)
+
+        print("Transcription completed.")
+
+        # Combine all transcription results
+        transcript = ""
+        for result in response.results:
+            transcript += result.alternatives[0].transcript + " "
+
+        return transcript.strip()
+
+    except Exception as e:
+        print(f"Error during transcription: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        raise Exception(f"Transcription failed: {str(e)}")
 
 
 async def process_video(video_path: str) -> str:
@@ -79,6 +122,8 @@ async def process_video(video_path: str) -> str:
     try:
         # Extract audio from video
         audio_path = await extract_audio_from_video(video_path)
+
+        print("Audio extracted to:", audio_path)
 
         # Transcribe the audio
         transcript = await transcribe_audio(audio_path)
