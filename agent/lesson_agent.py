@@ -4,6 +4,8 @@ from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List
 from config import config
+import re
+import json
 
 
 class VocabularyWord(BaseModel):
@@ -56,7 +58,34 @@ class LanguageLearningAgent:
         )
 
         self.parser = PydanticOutputParser(pydantic_object=LessonPlan)
+        self._setup_prompt()
 
+    @staticmethod
+    def clean_json_response(text: str) -> str:
+        """Extract JSON from response, handling markdown code blocks"""
+        text = text.strip()
+
+        # Try to find JSON wrapped in markdown code blocks
+        # Pattern: ```json ... ``` or ``` ... ```
+        json_block_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+        match = re.search(json_block_pattern, text, re.DOTALL)
+
+        if match:
+            return match.group(1).strip()
+
+        # If no code blocks, try to find JSON object directly
+        # Look for content between first { and last }
+        json_pattern = r'(\{.*\})'
+        match = re.search(json_pattern, text, re.DOTALL)
+
+        if match:
+            return match.group(1).strip()
+
+        # If still nothing found, return the original text
+        return text
+
+    def _setup_prompt(self):
+        """Setup the prompt template"""
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert language teacher and curriculum designer.
 Your task is to analyze a monologue in a foreign language and create a comprehensive lesson plan.
@@ -76,8 +105,11 @@ For comprehension questions, create a mix of:
 Questions should test understanding of the monologue content, vocabulary usage, and grammatical structures.
 Focus on words and structures that would be most valuable for language learners.
 
+IMPORTANT: You MUST respond with valid JSON only. Do not include any additional text, explanations, or markdown formatting.
+Your response should be a single JSON object that matches the schema exactly.
+
 {format_instructions}"""),
-            ("user", "Analyze this monologue and create a lesson plan:\n\n{monologue}")
+            ("user", "Analyze this monologue and create a lesson plan. Respond with ONLY valid JSON:\n\n{monologue}")
         ])
 
     def generate_lesson_plan(self, monologue: str) -> LessonPlan:
@@ -90,14 +122,57 @@ Focus on words and structures that would be most valuable for language learners.
         Returns:
             LessonPlan object with vocabulary, structures, and teaching suggestions
         """
-        chain = self.prompt | self.llm | self.parser
+        from langchain.output_parsers import OutputFixingParser
 
-        result = chain.invoke({
-            "monologue": monologue,
-            "format_instructions": self.parser.get_format_instructions()
-        })
+        try:
+            # First attempt: generate and clean the output
+            chain = self.prompt | self.llm
 
-        return result
+            response = chain.invoke({
+                "monologue": monologue,
+                "format_instructions": self.parser.get_format_instructions()
+            })
+
+            # Debug: print raw response
+            print("=" * 80)
+            print("RAW LLM RESPONSE:")
+            print(response.content[:500])  # First 500 chars
+            print("=" * 80)
+
+            # Clean the response text
+            cleaned_text = self.clean_json_response(response.content)
+
+            # Debug: print cleaned response
+            print("CLEANED JSON:")
+            print(cleaned_text[:500])  # First 500 chars
+            print("=" * 80)
+
+            # Parse with the cleaned text
+            result = self.parser.parse(cleaned_text)
+
+            return result
+        except Exception as e:
+            # If parsing fails, try with OutputFixingParser which uses the LLM to fix the output
+            print(f"Initial parsing failed: {e}. Attempting to fix output...")
+
+            try:
+                fixing_parser = OutputFixingParser.from_llm(parser=self.parser, llm=self.llm)
+
+                # Get the raw response again
+                chain = self.prompt | self.llm
+                response = chain.invoke({
+                    "monologue": monologue,
+                    "format_instructions": self.parser.get_format_instructions()
+                })
+
+                # Clean and fix
+                cleaned_text = self.clean_json_response(response.content)
+                result = fixing_parser.parse(cleaned_text)
+
+                return result
+            except Exception as e2:
+                print(f"OutputFixingParser also failed: {e2}")
+                raise Exception(f"Failed to generate valid lesson plan: {str(e2)}")
 
     def format_lesson_plan(self, lesson_plan: LessonPlan) -> str:
         """

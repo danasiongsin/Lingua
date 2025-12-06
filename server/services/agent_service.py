@@ -76,6 +76,108 @@ class AgentService:
         except Exception as e:
             raise Exception(f"Error generating lesson plan: {str(e)}")
 
+    async def generate_detailed_info(self, item_type: str, word: str, translation: str = None,
+                                     structure_name: str = None) -> dict:
+        """
+        Generate detailed information and additional examples for vocabulary or grammar.
+
+        Args:
+            item_type: Either 'vocab' or 'grammar'
+            word: The vocabulary word (for vocab) or structure name (for grammar)
+            translation: Translation of the word (for vocab only)
+            structure_name: Name of the grammar structure (for grammar only)
+
+        Returns:
+            Dictionary containing detailed description and examples
+        """
+        try:
+            agent = self._get_agent()
+
+            if item_type == 'vocab':
+                prompt = f"""Provide a detailed linguistic analysis of the word "{word}" ({translation}).
+
+Include:
+1. A deeper description covering:
+   - Etymology and word origin
+   - Nuanced meanings and connotations
+   - Register (formal/informal) and usage contexts
+   - Common collocations (words it's frequently used with)
+   - Any idiomatic expressions using this word
+
+2. Five diverse example sentences demonstrating:
+   - Different contexts (casual, formal, professional, etc.)
+   - Different grammatical constructions
+   - Different meanings if the word is polysemous
+
+Format your response as:
+DESCRIPTION:
+[Your detailed description here]
+
+EXAMPLES:
+1. [Example sentence 1]
+2. [Example sentence 2]
+3. [Example sentence 3]
+4. [Example sentence 4]
+5. [Example sentence 5]"""
+
+            else:  # grammar
+                prompt = f"""Provide a comprehensive explanation of the grammar structure "{structure_name}".
+
+Include:
+1. A deeper description covering:
+   - Detailed grammatical explanation
+   - When and why this structure is used
+   - Common mistakes learners make
+   - Comparison with similar structures
+   - Register and formality level
+
+2. Five diverse example sentences showing:
+   - Different contexts and situations
+   - Variations of the structure
+   - Common vs. advanced usage
+   - Contrasts with alternative structures
+
+Format your response as:
+DESCRIPTION:
+[Your detailed description here]
+
+EXAMPLES:
+1. [Example sentence 1]
+2. [Example sentence 2]
+3. [Example sentence 3]
+4. [Example sentence 4]
+5. [Example sentence 5]"""
+
+            # Use the agent's LLM to generate the response
+            from langchain_core.messages import HumanMessage
+
+            response = agent.llm.invoke([HumanMessage(content=prompt)])
+            content = response.content
+
+            # Parse the response
+            parts = content.split("EXAMPLES:")
+            description = parts[0].replace("DESCRIPTION:", "").strip()
+
+            examples = []
+            if len(parts) > 1:
+                example_lines = parts[1].strip().split("\n")
+                for line in example_lines:
+                    line = line.strip()
+                    # Remove numbering (1. 2. etc.) from examples
+                    if line and len(line) > 2:
+                        # Remove leading numbers and dots
+                        cleaned = line.lstrip("0123456789. ").strip()
+                        if cleaned:
+                            examples.append(cleaned)
+
+            return {
+                "description": description,
+                "examples": examples[:5]  # Ensure we only return 5 examples
+            }
+
+        except Exception as e:
+            raise Exception(f"Error generating detailed info: {str(e)}")
+
 
 # Global instance
 agent_service = AgentService()

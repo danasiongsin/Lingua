@@ -8,7 +8,7 @@ def create_app():
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5174"],  # React dev server
+        allow_origins=["http://localhost:5173"],  # React dev server
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
